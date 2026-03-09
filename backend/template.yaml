@@ -1,0 +1,280 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Cloud Posture Scanner – Serverless stack with API Gateway, Lambda functions,
+  DynamoDB for scan results storage, and least-privilege IAM roles.
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 60
+    MemorySize: 256
+    Environment:
+      Variables:
+        AWS_ACCOUNT_ID: !Ref AWS::AccountId
+        DYNAMODB_TABLE: !Ref ScanResultsTable
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization'"
+      AllowOrigin: "'*'"
+
+# ─── DynamoDB Table ───────────────────────────────────────────────────────────
+Resources:
+  ScanResultsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: scan_results
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: resource_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: resource_id
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+# ─── IAM Roles ────────────────────────────────────────────────────────────────
+  EC2DiscoveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CloudPostureScanner-EC2DiscoveryRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: EC2ReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeRegions
+                Resource: "*"
+
+  S3DiscoveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CloudPostureScanner-S3DiscoveryRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3ReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketLocation
+                  - s3:GetBucketEncryption
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:GetBucketPolicyStatus
+                Resource: "*"
+
+  CISChecksRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CloudPostureScanner-CISChecksRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CISChecksPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  # S3 checks
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketEncryption
+                  - s3:GetBucketPublicAccessBlock
+                  # IAM checks
+                  - iam:GetAccountSummary
+                  - iam:ListVirtualMFADevices
+                  - iam:ListUsers
+                  - iam:ListAccessKeys
+                  # CloudTrail checks
+                  - cloudtrail:DescribeTrails
+                  - cloudtrail:GetTrailStatus
+                  # EC2/SG checks
+                  - ec2:DescribeSecurityGroups
+                  # DynamoDB write
+                  - dynamodb:PutItem
+                Resource: "*"
+
+  GetResultsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CloudPostureScanner-GetResultsRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                  - dynamodb:GetItem
+                Resource: !GetAtt ScanResultsTable.Arn
+
+  RunScanRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CloudPostureScanner-RunScanRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RunScanPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketEncryption
+                  - s3:GetBucketPublicAccessBlock
+                  - iam:GetAccountSummary
+                  - iam:ListUsers
+                  - iam:ListAccessKeys
+                  - cloudtrail:DescribeTrails
+                  - cloudtrail:GetTrailStatus
+                  - ec2:DescribeSecurityGroups
+                  - dynamodb:PutItem
+                Resource: "*"
+
+# ─── Lambda Functions ─────────────────────────────────────────────────────────
+  DiscoverEC2Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cloud-posture-discoverEC2
+      CodeUri: lambdas/discoverEC2/
+      Handler: index.handler
+      Role: !GetAtt EC2DiscoveryRole.Arn
+      Description: Discovers EC2 instances and returns details including instance type, state, IPs, and security groups.
+      Events:
+        GetInstances:
+          Type: Api
+          Properties:
+            Path: /instances
+            Method: get
+
+  DiscoverS3Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cloud-posture-discoverS3
+      CodeUri: lambdas/discoverS3/
+      Handler: index.handler
+      Role: !GetAtt S3DiscoveryRole.Arn
+      Description: Discovers S3 buckets with encryption status and public access configuration.
+      Events:
+        GetBuckets:
+          Type: Api
+          Properties:
+            Path: /buckets
+            Method: get
+
+  RunCISChecksFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cloud-posture-runCISChecks
+      CodeUri: lambdas/runCISChecks/
+      Handler: index.handler
+      Role: !GetAtt CISChecksRole.Arn
+      Timeout: 120
+      Description: Runs 6 CIS benchmark checks and stores results in DynamoDB.
+      Events:
+        RunChecks:
+          Type: Api
+          Properties:
+            Path: /cis-checks
+            Method: post
+
+  GetResultsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cloud-posture-getResults
+      CodeUri: lambdas/getResults/
+      Handler: index.handler
+      Role: !GetAtt GetResultsRole.Arn
+      Description: Retrieves stored CIS scan results from DynamoDB with optional filtering.
+      Events:
+        GetCISResults:
+          Type: Api
+          Properties:
+            Path: /cis-results
+            Method: get
+
+  RunScanFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cloud-posture-runScan
+      CodeUri: lambdas/runScan/
+      Handler: index.handler
+      Role: !GetAtt RunScanRole.Arn
+      Timeout: 180
+      Description: Orchestrates a full cloud posture scan – runs all CIS checks and stores results.
+      Events:
+        TriggerScan:
+          Type: Api
+          Properties:
+            Path: /scan
+            Method: post
+
+# ─── Outputs ──────────────────────────────────────────────────────────────────
+Outputs:
+  ApiBaseUrl:
+    Description: API Gateway base URL – use this in the frontend app.js
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+    Export:
+      Name: CloudPostureScannerApiUrl
+
+  DynamoDBTableName:
+    Description: DynamoDB table storing scan results
+    Value: !Ref ScanResultsTable
+
+  DynamoDBTableArn:
+    Description: DynamoDB table ARN
+    Value: !GetAtt ScanResultsTable.Arn

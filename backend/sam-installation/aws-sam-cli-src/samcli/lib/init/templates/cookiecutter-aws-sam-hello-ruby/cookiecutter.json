@@ -1,0 +1,9 @@
+{
+    "project_name": "Name of the project",
+    "runtime": "ruby3.4",
+    "architectures": {
+        "value": [
+            "x86_64"
+        ]
+    }
+}
