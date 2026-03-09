@@ -1,8 +1,0 @@
-{
-    "project_name": "Name of the project",
-    "architectures": {
-        "value": [
-            "x86_64"
-        ]
-    }
-}
