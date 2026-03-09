@@ -22,19 +22,23 @@ The system follows a **client–server architecture**.
 ## Components
 
 ### Frontend
+
 - React dashboard
 - Displays scan results
 - Allows users to trigger security scans
 
 ### Backend
+
 - Node.js / Express API
 - Security scanning engine
 - CIS benchmark rule evaluation
 
 ### AWS Integration
+
 - AWS SDK used to query AWS resources
 
 ### AWS Services Scanned
+
 - EC2
 - S3
 - IAM
@@ -55,14 +59,14 @@ The system follows a **client–server architecture**.
 
 # Security Checks Implemented
 
-| Check | Description |
-|------|-------------|
-| S3_PUBLIC_ACCESS | Ensures S3 buckets block public access |
-| S3_ENCRYPTION | Verifies S3 bucket encryption is enabled |
-| SG_OPEN_SSH_RDP | Detects security groups allowing SSH/RDP from the internet |
-| IAM_ROOT_MFA | Ensures root account has MFA enabled |
-| IAM_ACCESS_KEY_AGE | Detects outdated IAM access keys |
-| CLOUDTRAIL_ENABLED | Ensures CloudTrail logging is enabled |
+| Check              | Description                                                |
+| ------------------ | ---------------------------------------------------------- |
+| S3_PUBLIC_ACCESS   | Ensures S3 buckets block public access                     |
+| S3_ENCRYPTION      | Verifies S3 bucket encryption is enabled                   |
+| SG_OPEN_SSH_RDP    | Detects security groups allowing SSH/RDP from the internet |
+| IAM_ROOT_MFA       | Ensures root account has MFA enabled                       |
+| IAM_ACCESS_KEY_AGE | Detects outdated IAM access keys                           |
+| CLOUDTRAIL_ENABLED | Ensures CloudTrail logging is enabled                      |
 
 ---
 
@@ -78,8 +82,6 @@ cd visiblaze-assignment
 ---
 
 ## 2. Install Dependencies
-
-
 
 ```bash
 cd backend
@@ -228,28 +230,23 @@ https://visiblaze-assignment.vercel.app
 
 ---
 
-# System Architecture 
-
-[system architecture](system_architecture.png)
----
-
 # Tech Stack
 
 ### Frontend
-- React 
+
+- React
 - Tailwind CSS
 
 ### Backend
+
 - Node.js
 - Express
 
 ### Cloud Integration
+
 - AWS SDK
 
 ---
-
-
-
 
 # Author
 
