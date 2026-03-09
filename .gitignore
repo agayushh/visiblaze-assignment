@@ -9,6 +9,8 @@ lerna-debug.log*
 # SAM / AWS build artifacts
 .aws-sam/
 samconfig.toml
+sam-installation/
+*.zip
 
 # Environment secrets
 .env
